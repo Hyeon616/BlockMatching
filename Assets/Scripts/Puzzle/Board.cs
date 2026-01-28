@@ -10,13 +10,14 @@ public class Board : MonoBehaviour
 
     [Header("Prefab")]
     [SerializeField] private GameObject brownStonePrefab;
-    [SerializeField, Range(1f, 2f)] private float scalePadding = 1.1f;
+    [SerializeField, Range(1f, 2f)] private float scalePadding = 1.3f;
 
     private GameObject[,] backgroundTiles;
 
     void Start()
     {
         CreateBackground();
+        SetupCamera();
     }
 
     void CreateBackground()
@@ -46,5 +47,34 @@ public class Board : MonoBehaviour
 
         Vector2 spriteSize = sr.sprite.bounds.size;
         return new Vector3(scalePadding / spriteSize.x, scalePadding / spriteSize.y, 1f);
+    }
+
+    /// <summary>
+    /// 보드 전체가 보이도록 카메라 설정
+    /// </summary>
+    void SetupCamera()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        // 보드 중심 위치 계산
+        float centerX = (width - 1) / 2f;
+        float centerY = (height - 1) / 2f;
+        cam.transform.position = new Vector3(centerX, centerY, -10f);
+
+        // 화면 비율에 맞게 orthographicSize 계산
+        float screenRatio = (float)Screen.width / Screen.height;
+        float boardRatio = (float)width / height;
+
+        if (screenRatio >= boardRatio)
+        {
+            // 세로 기준
+            cam.orthographicSize = height / 2f;
+        }
+        else
+        {
+            // 가로 기준
+            cam.orthographicSize = width / 2f / screenRatio;
+        }
     }
 }
