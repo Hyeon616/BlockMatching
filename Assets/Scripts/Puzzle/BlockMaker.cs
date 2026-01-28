@@ -10,8 +10,8 @@ public class BlockMaker : MonoBehaviour
     [SerializeField] private GameObject creamStonePrefab;
     [SerializeField, Range(1f, 2f)] private float scalePadding = 1.3f;
 
-    [Header("생성 위치")]
-    [SerializeField] private Transform spawnPoint;
+    [Header("참조")]
+    [SerializeField] private Board board;
 
     private Vector3 cellScale;
 
@@ -40,16 +40,34 @@ public class BlockMaker : MonoBehaviour
             return null;
 
         GameObject blockParent = new GameObject(data.blockName);
-        blockParent.transform.position = spawnPoint != null ? spawnPoint.position : Vector3.zero;
 
         Vector2Int[] filledCells = data.GetFilledCells();
 
+        // 블록의 최소 좌표 계산
+        int minX = int.MaxValue, minY = int.MaxValue;
+        foreach (var cell in filledCells)
+        {
+            if (cell.x < minX) minX = cell.x;
+            if (cell.y < minY) minY = cell.y;
+        }
+
+        // 보드 상단 중앙에서 생성 (정수 좌표)
+        int spawnX = (board.Width / 2) - 1;
+        int spawnY = board.Height - 4;
+        blockParent.transform.position = new Vector3(spawnX, spawnY, 0);
+
+        // 셀 생성 (정수 좌표 사용)
         foreach (Vector2Int cell in filledCells)
         {
             GameObject cellObj = Instantiate(creamStonePrefab, blockParent.transform);
-            cellObj.transform.localPosition = new Vector3(cell.x, cell.y, 0);
+            // 최소 좌표를 기준으로 0부터 시작하도록 오프셋
+            cellObj.transform.localPosition = new Vector3(cell.x - minX, cell.y - minY, 0);
             cellObj.transform.localScale = cellScale;
         }
+
+        // BlockController 추가 및 초기화
+        BlockController controller = blockParent.AddComponent<BlockController>();
+        controller.Initialize(board);
 
         return blockParent;
     }
