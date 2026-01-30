@@ -7,39 +7,32 @@ public class BlockMaker : MonoBehaviour
 {
     [Header("블록 설정")]
     [SerializeField] private BlockData[] blockDataList;
-    [SerializeField] private GameObject creamStonePrefab;
-    [SerializeField, Range(1f, 2f)] private float scalePadding = 1.3f;
 
     [Header("참조")]
     [SerializeField] private Board board;
-
-    private Vector3 cellScale;
-
-    void Awake()
-    {
-        cellScale = GetScaleForUnitSize(creamStonePrefab);
-    }
+    [SerializeField] private SoundManager soundManager;
 
     /// <summary>
-    /// 인덱스로 블록 생성
+    /// 랜덤 BlockData 반환
     /// </summary>
-    public GameObject CreateBlock(int index)
+    public BlockData GetRandomBlockData()
     {
-        if (index < 0 || index >= blockDataList.Length)
+        if (blockDataList == null || blockDataList.Length == 0)
             return null;
 
-        return CreateBlock(blockDataList[index]);
+        int randomIndex = Random.Range(0, blockDataList.Length);
+        return blockDataList[randomIndex];
     }
 
     /// <summary>
-    /// BlockData로 블록 생성
+    /// BlockData로 플레이 가능한 블록 생성 (Board 풀에서 셀을 가져옴)
     /// </summary>
     public GameObject CreateBlock(BlockData data)
     {
-        if (data == null || creamStonePrefab == null)
+        if (data == null || board == null)
             return null;
 
-        GameObject blockParent = new GameObject(data.blockName);
+        GameObject blockParent = new GameObject(data.BlockName);
 
         Vector2Int[] filledCells = data.GetFilledCells();
 
@@ -53,21 +46,20 @@ public class BlockMaker : MonoBehaviour
 
         // 보드 상단 중앙에서 생성 (정수 좌표)
         int spawnX = (board.Width / 2) - 1;
-        int spawnY = board.Height - 4;
+        int spawnY = board.Height - 2;
         blockParent.transform.position = new Vector3(spawnX, spawnY, 0);
 
-        // 셀 생성 (정수 좌표 사용)
+        // 풀에서 셀을 가져와 배치
         foreach (Vector2Int cell in filledCells)
         {
-            GameObject cellObj = Instantiate(creamStonePrefab, blockParent.transform);
-            // 최소 좌표를 기준으로 0부터 시작하도록 오프셋
+            GameObject cellObj = board.GetCellFromPool();
+            cellObj.transform.SetParent(blockParent.transform);
             cellObj.transform.localPosition = new Vector3(cell.x - minX, cell.y - minY, 0);
-            cellObj.transform.localScale = cellScale;
         }
 
         // BlockController 추가 및 초기화
         BlockController controller = blockParent.AddComponent<BlockController>();
-        controller.Initialize(board);
+        controller.Initialize(board, soundManager);
 
         return blockParent;
     }
@@ -75,22 +67,10 @@ public class BlockMaker : MonoBehaviour
     /// <summary>
     /// 랜덤 블록 생성
     /// </summary>
-    public GameObject CreateRandomBlock()
+    private GameObject CreateRandomBlock()
     {
-        if (blockDataList == null || blockDataList.Length == 0)
-            return null;
-
-        int randomIndex = Random.Range(0, blockDataList.Length);
-        return CreateBlock(randomIndex);
+        BlockData data = GetRandomBlockData();
+        return CreateBlock(data);
     }
 
-    Vector3 GetScaleForUnitSize(GameObject prefab)
-    {
-        SpriteRenderer sr = prefab.GetComponent<SpriteRenderer>();
-        if (sr == null || sr.sprite == null)
-            return Vector3.one;
-
-        Vector2 spriteSize = sr.sprite.bounds.size;
-        return new Vector3(scalePadding / spriteSize.x, scalePadding / spriteSize.y, 1f);
-    }
 }

@@ -12,7 +12,7 @@ public class BlockDataEditor : Editor
         BlockData blockData = (BlockData)target;
 
         EditorGUILayout.LabelField("블록 정보", EditorStyles.boldLabel);
-        blockData.blockName = EditorGUILayout.TextField("블록 이름", blockData.blockName);
+        blockData.BlockName = EditorGUILayout.TextField("블록 이름", blockData.BlockName);
 
         EditorGUILayout.Space(10);
         EditorGUILayout.LabelField("블록 모양 (4x4 그리드)", EditorStyles.boldLabel);
@@ -45,8 +45,7 @@ public class BlockDataEditor : Editor
         if (GUILayout.Button("모두 지우기"))
         {
             Undo.RecordObject(blockData, "블록 모양 초기화");
-            for (int i = 0; i < 16; i++)
-                blockData.shape[i] = false;
+            blockData.ClearShape();
             EditorUtility.SetDirty(blockData);
         }
     }

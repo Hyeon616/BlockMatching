@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 6322746928832617231}
   - component: {fileID: 8192286821323857630}
   m_Layer: 0
-  m_Name: brownStone
+  m_Name: Background_Dark
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -74,7 +74,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 21300000, guid: a87daf7c2c8a4434c8d575f0954a5802, type: 3}
-  m_Color: {r: 0.5471698, g: 0.5445888, b: 0.5445888, a: 1}
+  m_Color: {r: 0.3962264, g: 0.3962264, b: 0.3962264, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0

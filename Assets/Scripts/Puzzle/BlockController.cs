@@ -14,6 +14,7 @@ public class BlockController : MonoBehaviour
     [SerializeField] private float fallInterval = 1f;
 
     private Board board;
+    private SoundManager soundManager;
     private float lastMoveTime;
     private float lastFallTime;
     private bool isActive;
@@ -24,11 +25,12 @@ public class BlockController : MonoBehaviour
     public event Action OnLanded;
 
     /// <summary>
-    /// 블록 초기화 (Board 참조 주입)
+    /// 블록 초기화 (참조 주입)
     /// </summary>
-    public void Initialize(Board board)
+    public void Initialize(Board board, SoundManager soundManager)
     {
         this.board = board;
+        this.soundManager = soundManager;
         isActive = true;
         lastFallTime = Time.time;
     }
@@ -199,6 +201,8 @@ public class BlockController : MonoBehaviour
         if (!isActive) return;
 
         isActive = false;
+
+        soundManager.Play(SoundType.Land);
 
         // 블록을 보드에 등록
         board.PlaceBlock(transform);

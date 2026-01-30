@@ -7,12 +7,13 @@ using UnityEngine;
 public class BlockData : ScriptableObject
 {
     [Header("블록 정보")]
-    public string blockName;
+    [SerializeField] private string blockName;
 
     [Header("블록 모양 (4x4 그리드)")]
     [Tooltip("4x4 그리드에서 채워질 셀을 선택하세요.")]
-    public bool[] shape = new bool[16];
+    [SerializeField] private bool[] shape = new bool[16];
 
+    public string BlockName { get => blockName; set => blockName = value; }
     public int GridSize => 4;
 
     /// <summary>
@@ -32,6 +33,15 @@ public class BlockData : ScriptableObject
     {
         if (x >= 0 && x < GridSize && y >= 0 && y < GridSize)
             shape[y * GridSize + x] = value;
+    }
+
+    /// <summary>
+    /// 모든 셀을 비움
+    /// </summary>
+    public void ClearShape()
+    {
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = false;
     }
 
     /// <summary>

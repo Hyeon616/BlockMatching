@@ -8,11 +8,13 @@ public class GameManager : MonoBehaviour
 {
     [Header("참조")]
     [SerializeField] private BlockMaker blockMaker;
+    [SerializeField] private Board board;
 
     [Header("UI")]
     [SerializeField] private Button startButton;
 
     private BlockController currentBlock;
+    private BlockData nextBlockData;
 
     void Start()
     {
@@ -32,15 +34,37 @@ public class GameManager : MonoBehaviour
             startButton.gameObject.SetActive(false);
         }
 
+        // 첫 번째 다음 블록 준비
+        PrepareNextBlock();
+
+        // 현재 블록 생성
         SpawnBlock();
     }
 
     /// <summary>
-    /// 새 블록 생성
+    /// 다음 블록 데이터 준비 및 미리보기 표시
+    /// </summary>
+    void PrepareNextBlock()
+    {
+        nextBlockData = blockMaker.GetRandomBlockData();
+
+        if (board != null)
+        {
+            board.ShowPreviewBlock(nextBlockData);
+        }
+    }
+
+    /// <summary>
+    /// 현재 블록 생성 (다음 블록 데이터 사용)
     /// </summary>
     void SpawnBlock()
     {
-        GameObject blockObj = blockMaker.CreateRandomBlock();
+        if (nextBlockData == null)
+        {
+            nextBlockData = blockMaker.GetRandomBlockData();
+        }
+
+        GameObject blockObj = blockMaker.CreateBlock(nextBlockData);
         if (blockObj != null)
         {
             currentBlock = blockObj.GetComponent<BlockController>();
@@ -49,6 +73,9 @@ public class GameManager : MonoBehaviour
                 currentBlock.OnLanded += OnBlockLanded;
             }
         }
+
+        // 다음 블록 준비
+        PrepareNextBlock();
     }
 
     /// <summary>
