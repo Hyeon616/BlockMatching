@@ -9,6 +9,7 @@ public class GameManager : MonoBehaviour
     [Header("참조")]
     [SerializeField] private BlockMaker blockMaker;
     [SerializeField] private Board board;
+    [SerializeField] private SoundManager soundManager;
 
     [Header("UI")]
     [SerializeField] private Button startButton;
@@ -65,13 +66,16 @@ public class GameManager : MonoBehaviour
         }
 
         GameObject blockObj = blockMaker.CreateBlock(nextBlockData);
-        if (blockObj != null)
+        if (blockObj == null)
         {
-            currentBlock = blockObj.GetComponent<BlockController>();
-            if (currentBlock != null)
-            {
-                currentBlock.OnLanded += OnBlockLanded;
-            }
+            GameOver();
+            return;
+        }
+
+        currentBlock = blockObj.GetComponent<BlockController>();
+        if (currentBlock != null)
+        {
+            currentBlock.OnLanded += OnBlockLanded;
         }
 
         // 다음 블록 준비
@@ -86,9 +90,28 @@ public class GameManager : MonoBehaviour
         if (currentBlock != null)
         {
             currentBlock.OnLanded -= OnBlockLanded;
+            currentBlock = null;
         }
 
         // 새 블록 생성
         SpawnBlock();
+    }
+
+    /// <summary>
+    /// 게임오버 처리
+    /// </summary>
+    void GameOver()
+    {
+        currentBlock = null;
+        nextBlockData = null;
+
+        soundManager.Play(SoundType.GameOver);
+
+        board.ClearBoard();
+
+        if (startButton != null)
+        {
+            startButton.gameObject.SetActive(true);
+        }
     }
 }

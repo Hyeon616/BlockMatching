@@ -25,14 +25,25 @@ public class BlockController : MonoBehaviour
     public event Action OnLanded;
 
     /// <summary>
-    /// 블록 초기화 (참조 주입)
+    /// 블록 초기화 (참조 주입). 스폰 위치가 유효하면 true, 게임오버면 false 반환
     /// </summary>
-    public void Initialize(Board board, SoundManager soundManager)
+    public bool Initialize(Board board, SoundManager soundManager)
     {
         this.board = board;
         this.soundManager = soundManager;
         isActive = true;
+        lastMoveTime = 0f;
         lastFallTime = Time.time;
+        OnLanded = null;
+
+        if (!IsValidPosition())
+        {
+            isActive = false;
+            return false;
+        }
+
+        board.ShowLandingPreview(transform);
+        return true;
     }
 
     void Update()
@@ -110,6 +121,8 @@ public class BlockController : MonoBehaviour
             transform.position -= direction;
             return false;
         }
+
+        board.ShowLandingPreview(transform);
         return true;
     }
 
@@ -128,7 +141,11 @@ public class BlockController : MonoBehaviour
         ApplyRotation();
 
         // 유효하면 성공
-        if (IsValidPosition()) return;
+        if (IsValidPosition())
+        {
+            board.ShowLandingPreview(transform);
+            return;
+        }
 
         // Wall Kick 시도: 좌, 우, 상 이동
         Vector3[] wallKicks = { Vector3.left, Vector3.right, Vector3.up,
@@ -137,7 +154,11 @@ public class BlockController : MonoBehaviour
         foreach (Vector3 kick in wallKicks)
         {
             transform.position += kick;
-            if (IsValidPosition()) return;
+            if (IsValidPosition())
+            {
+                board.ShowLandingPreview(transform);
+                return;
+            }
             transform.position -= kick;
         }
 
@@ -202,6 +223,8 @@ public class BlockController : MonoBehaviour
 
         isActive = false;
 
+        board.HideLandingPreview();
+
         soundManager.Play(SoundType.Land);
 
         // 블록을 보드에 등록
@@ -211,6 +234,9 @@ public class BlockController : MonoBehaviour
         board.ClearFullLines();
 
         OnLanded?.Invoke();
+
+        // 자식 셀이 모두 Board로 이전된 후 빈 부모를 풀에 반환
+        board.ReturnBlockParentToPool(gameObject);
     }
 
     bool IsValidPosition()

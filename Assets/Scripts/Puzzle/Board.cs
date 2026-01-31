@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 /// <summary>
-/// 게임 보드와 다음 블록 미리보기를 관리하는 클래스
+/// 게임 보드와 다음 블록 미리보기를 관리
 /// </summary>
 public class Board : MonoBehaviour
 {
@@ -28,11 +28,11 @@ public class Board : MonoBehaviour
     #endregion
 
     #region 프리팹
-    [FormerlySerializedAs("backgroundPrefab1")]
     [Header("프리팹")]
     [SerializeField] private GameObject backgroundPrefab_Light;
     [SerializeField] private GameObject backgroundPrefab_Dark;
     [SerializeField] private GameObject blockPrefab;
+    [SerializeField] private GameObject previewLandPrefab;
     [SerializeField, Range(1f, 2f)] private float scalePadding = 1.3f;
     #endregion
 
@@ -49,10 +49,21 @@ public class Board : MonoBehaviour
     private Stack<GameObject> cellPool;
     private Transform cellPoolContainer;
 
+    // 착지 미리보기 풀
+    private const int LANDING_PREVIEW_POOL_SIZE = 16;
+    private List<GameObject> landingPreviewPool;
+    private Transform landingPreviewContainer;
+
+    // 블록 부모 오브젝트 풀
+    private const int BLOCK_PARENT_POOL_SIZE = 2;
+    private Stack<GameObject> blockParentPool;
+    private Transform blockParentPoolContainer;
+
     // 셀 스케일 캐시
     private Vector3 backgroundScale1;
     private Vector3 backgroundScale2;
     private Vector3 blockScale;
+    private Vector3 previewLandScale;
 
     #region Unity 생명주기
     private void Start()
@@ -62,10 +73,14 @@ public class Board : MonoBehaviour
         backgroundScale2 = GetScaleForUnitSize(backgroundPrefab_Dark);
         if (blockPrefab != null)
             blockScale = GetScaleForUnitSize(blockPrefab);
+        if (previewLandPrefab != null)
+            previewLandScale = GetScaleForUnitSize(previewLandPrefab);
 
         CreateBackground();
         CreatePreviewArea();
         CreateCellPool();
+        CreateLandingPreviewPool();
+        CreateBlockParentPool();
         SetupCamera();
     }
     #endregion
@@ -221,6 +236,29 @@ public class Board : MonoBehaviour
     }
     #endregion
 
+    #region 보드 초기화
+    /// <summary>
+    /// 보드의 모든 셀을 풀에 반환하고 그리드 초기화
+    /// </summary>
+    public void ClearBoard()
+    {
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (grid[x, y] != null)
+                {
+                    ReturnCellToPool(grid[x, y].gameObject);
+                    grid[x, y] = null;
+                }
+            }
+        }
+
+        HideLandingPreview();
+        ClearPreviewBlock();
+    }
+    #endregion
+
     #region 보드 유효성 검사
     /// <summary>
     /// 해당 위치가 보드 범위 내인지 확인
@@ -255,13 +293,22 @@ public class Board : MonoBehaviour
     /// </summary>
     public void PlaceBlock(Transform blockTransform)
     {
-        foreach (Transform child in blockTransform)
+        // reparent 시 컬렉션 변경을 피하기 위해 먼저 수집
+        int childCount = blockTransform.childCount;
+        Transform[] children = new Transform[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            children[i] = blockTransform.GetChild(i);
+        }
+
+        foreach (Transform child in children)
         {
             int x = Mathf.RoundToInt(child.position.x);
             int y = Mathf.RoundToInt(child.position.y);
 
             if (y < height && x >= 0 && x < width && y >= 0)
             {
+                child.SetParent(transform);
                 grid[x, y] = child;
             }
         }
@@ -384,6 +431,23 @@ public class Board : MonoBehaviour
     }
 
     /// <summary>
+    /// 블록 부모의 모든 자식 셀을 풀에 반환
+    /// </summary>
+    public void ReturnBlockCells(Transform blockTransform)
+    {
+        int childCount = blockTransform.childCount;
+        Transform[] children = new Transform[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            children[i] = blockTransform.GetChild(i);
+        }
+        foreach (Transform child in children)
+        {
+            ReturnCellToPool(child.gameObject);
+        }
+    }
+
+    /// <summary>
     /// 셀을 풀에 반환
     /// </summary>
     private void ReturnCellToPool(GameObject cell)
@@ -391,6 +455,159 @@ public class Board : MonoBehaviour
         cell.SetActive(false);
         cell.transform.SetParent(cellPoolContainer);
         cellPool.Push(cell);
+    }
+    #endregion
+
+    #region 블록 부모 오브젝트 풀
+    /// <summary>
+    /// 블록 부모(BlockController 포함) 오브젝트 풀 초기화
+    /// </summary>
+    private void CreateBlockParentPool()
+    {
+        blockParentPool = new Stack<GameObject>(BLOCK_PARENT_POOL_SIZE);
+
+        GameObject containerObj = new GameObject("BlockParentPool");
+        containerObj.transform.SetParent(transform);
+        blockParentPoolContainer = containerObj.transform;
+
+        for (int i = 0; i < BLOCK_PARENT_POOL_SIZE; i++)
+        {
+            GameObject blockParent = new GameObject("Block");
+            blockParent.transform.SetParent(blockParentPoolContainer);
+            blockParent.AddComponent<BlockController>();
+            blockParent.SetActive(false);
+            blockParentPool.Push(blockParent);
+        }
+    }
+
+    /// <summary>
+    /// 풀에서 블록 부모 가져오기 (부족하면 새로 생성)
+    /// </summary>
+    public GameObject GetBlockParentFromPool()
+    {
+        GameObject blockParent;
+        if (blockParentPool.Count > 0)
+        {
+            blockParent = blockParentPool.Pop();
+        }
+        else
+        {
+            blockParent = new GameObject("Block");
+            blockParent.AddComponent<BlockController>();
+        }
+        blockParent.transform.SetParent(null);
+        blockParent.SetActive(true);
+        return blockParent;
+    }
+
+    /// <summary>
+    /// 블록 부모를 풀에 반환
+    /// </summary>
+    public void ReturnBlockParentToPool(GameObject blockParent)
+    {
+        blockParent.SetActive(false);
+        blockParent.transform.SetParent(blockParentPoolContainer);
+        blockParentPool.Push(blockParent);
+    }
+    #endregion
+
+    #region 착지 미리보기
+    /// <summary>
+    /// 착지 미리보기 셀 풀 생성
+    /// </summary>
+    private void CreateLandingPreviewPool()
+    {
+        if (previewLandPrefab == null) return;
+
+        GameObject containerObj = new GameObject("LandingPreviewPool");
+        containerObj.transform.SetParent(transform);
+        landingPreviewContainer = containerObj.transform;
+
+        landingPreviewPool = new List<GameObject>(LANDING_PREVIEW_POOL_SIZE);
+        for (int i = 0; i < LANDING_PREVIEW_POOL_SIZE; i++)
+        {
+            GameObject cell = Instantiate(previewLandPrefab, landingPreviewContainer);
+            cell.transform.localScale = previewLandScale;
+            cell.SetActive(false);
+            landingPreviewPool.Add(cell);
+        }
+    }
+
+    /// <summary>
+    /// 현재 블록의 착지 위치에 미리보기 표시
+    /// </summary>
+    public void ShowLandingPreview(Transform blockTransform)
+    {
+        HideLandingPreview();
+
+        if (blockTransform == null || landingPreviewPool == null) return;
+
+        // 현재 블록의 각 셀 위치를 수집
+        int childCount = blockTransform.childCount;
+        Vector3[] cellPositions = new Vector3[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            cellPositions[i] = blockTransform.GetChild(i).position;
+        }
+
+        // 아래로 내릴 수 있는 최대 거리 계산
+        int dropDistance = CalculateDropDistance(blockTransform);
+
+        // 미리보기 셀 배치
+        for (int i = 0; i < childCount && i < landingPreviewPool.Count; i++)
+        {
+            GameObject previewCell = landingPreviewPool[i];
+            previewCell.transform.position = new Vector3(
+                cellPositions[i].x,
+                cellPositions[i].y - dropDistance,
+                0f
+            );
+            previewCell.SetActive(true);
+        }
+    }
+
+    /// <summary>
+    /// 착지 미리보기 숨김
+    /// </summary>
+    public void HideLandingPreview()
+    {
+        if (landingPreviewPool == null) return;
+
+        foreach (var cell in landingPreviewPool)
+        {
+            cell.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// 블록이 떨어질 수 있는 최대 거리 계산
+    /// </summary>
+    private int CalculateDropDistance(Transform blockTransform)
+    {
+        int dropDistance = 0;
+
+        while (true)
+        {
+            dropDistance++;
+            bool valid = true;
+
+            foreach (Transform child in blockTransform)
+            {
+                int x = Mathf.RoundToInt(child.position.x);
+                int y = Mathf.RoundToInt(child.position.y) - dropDistance;
+
+                if (!IsInsideBoard(x, y) || !IsEmpty(x, y))
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (!valid)
+            {
+                return dropDistance - 1;
+            }
+        }
     }
     #endregion
 

@@ -32,7 +32,8 @@ public class BlockMaker : MonoBehaviour
         if (data == null || board == null)
             return null;
 
-        GameObject blockParent = new GameObject(data.BlockName);
+        GameObject blockParent = board.GetBlockParentFromPool();
+        blockParent.name = data.BlockName;
 
         Vector2Int[] filledCells = data.GetFilledCells();
 
@@ -57,9 +58,17 @@ public class BlockMaker : MonoBehaviour
             cellObj.transform.localPosition = new Vector3(cell.x - minX, cell.y - minY, 0);
         }
 
-        // BlockController 추가 및 초기화
-        BlockController controller = blockParent.AddComponent<BlockController>();
-        controller.Initialize(board, soundManager);
+        // BlockController 초기화 (풀에서 가져온 오브젝트에 이미 컴포넌트 존재)
+        BlockController controller = blockParent.GetComponent<BlockController>();
+        bool valid = controller.Initialize(board, soundManager);
+
+        if (!valid)
+        {
+            // 게임오버: 셀을 풀에 반환하고 블록 부모도 반환
+            board.ReturnBlockCells(blockParent.transform);
+            board.ReturnBlockParentToPool(blockParent);
+            return null;
+        }
 
         return blockParent;
     }
