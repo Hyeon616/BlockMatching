@@ -215,7 +215,9 @@ public class BlockController : MonoBehaviour
 
     void HardDrop()
     {
-        while (Move(Vector3.down)) { }
+        int maxDrop = board.Height + 4;
+        int count = 0;
+        while (Move(Vector3.down) && count < maxDrop) { count++; }
         Land();
     }
 
@@ -232,13 +234,14 @@ public class BlockController : MonoBehaviour
         // 블록을 보드에 등록
         board.PlaceBlock(transform);
 
-        // 완성된 줄 제거
-        board.ClearFullLines();
-
-        OnLanded?.Invoke();
-
         // 자식 셀이 모두 Board로 이전된 후 빈 부모를 풀에 반환
         board.ReturnBlockParentToPool(gameObject);
+
+        // 중력 + 연쇄 클리어 (완료 후 다음 블록 스폰)
+        board.ApplyGravityAndClear(() =>
+        {
+            OnLanded?.Invoke();
+        });
     }
 
     bool IsValidPosition()

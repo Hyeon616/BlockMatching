@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: Block_T
   m_EditorClassIdentifier: 
   blockName: T
-  shape: 00000000000100000001000001010101
+  shape: 00000000000000000001000001010100

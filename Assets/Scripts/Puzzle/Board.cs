@@ -41,6 +41,10 @@ public class Board : MonoBehaviour
     // 보드 그리드 (셀 점유 상태)
     private Transform[,] grid;
 
+    // 하이어라키 정리용 컨테이너
+    private Transform bgContainer;
+    private Transform placedBlockContainer;
+
     // 미리보기
     private Transform previewContainer;
     private const int PREVIEW_POOL_SIZE = 16;
@@ -74,7 +78,11 @@ public class Board : MonoBehaviour
     [SerializeField] private float garbageInterval = 1f;
     private Transform currentBlockTransform;
     private Coroutine garbageCoroutine;
+    private Coroutine riseCoroutine;
     private System.Action onGarbageGameOver;
+    private HashSet<Transform> garbageCells = new HashSet<Transform>();
+    private bool isProcessingGravity;
+    private Coroutine gravityCoroutine;
 
     #region Unity 생명주기
     private void Start()
@@ -88,6 +96,7 @@ public class Board : MonoBehaviour
             previewLandScale = GetScaleForUnitSize(previewLandPrefab);
 
         CreateBackground();
+        CreatePlacedBlockContainer();
         CreatePreviewArea();
         CreateCellPool();
         CreateLandingPreviewPool();
@@ -102,6 +111,11 @@ public class Board : MonoBehaviour
     /// </summary>
     private void CreateBackground()
     {
+        GameObject bgObj = new GameObject("BG");
+        bgObj.transform.SetParent(transform);
+        bgObj.transform.localPosition = Vector3.zero;
+        bgContainer = bgObj.transform;
+
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
@@ -111,11 +125,21 @@ public class Board : MonoBehaviour
                 Vector3 scale = isEven ? backgroundScale1 : backgroundScale2;
 
                 Vector3 position = new Vector3(x, y, 0);
-                GameObject tile = Instantiate(prefab, position, Quaternion.identity, transform);
+                GameObject tile = Instantiate(prefab, position, Quaternion.identity, bgContainer);
                 tile.transform.localScale = scale;
                 tile.name = $"BG_{x}_{y}";
             }
         }
+    }
+    #endregion
+
+    #region 배치된 블록 컨테이너
+    private void CreatePlacedBlockContainer()
+    {
+        GameObject obj = new GameObject("Block");
+        obj.transform.SetParent(transform);
+        obj.transform.localPosition = Vector3.zero;
+        placedBlockContainer = obj.transform;
     }
     #endregion
 
@@ -270,6 +294,7 @@ public class Board : MonoBehaviour
 
         totalLinesCleared = 0;
         emptyCountPerLine = 1;
+        garbageCells.Clear();
     }
 
     /// <summary>
@@ -277,9 +302,18 @@ public class Board : MonoBehaviour
     /// </summary>
     public void PlayGameOverEffect(Action onComplete)
     {
-        // 실행 중인 AnimateRise 등 모든 코루틴 정지
+        // 실행 중인 모든 코루틴 정지 + 셀 위치 보정
         StopAllCoroutines();
         garbageCoroutine = null;
+        riseCoroutine = null;
+        gravityCoroutine = null;
+        isProcessingGravity = false;
+
+        // 모든 셀을 정수 좌표로 이동 (애니메이션 중단 후 보정)
+        for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+                if (grid[x, y] != null)
+                    grid[x, y].position = new Vector3(x, y, 0);
 
         HideLandingPreview();
         ClearPreviewBlock();
@@ -310,6 +344,8 @@ public class Board : MonoBehaviour
     {
         float gravity = -75f;
         float bottomY = -5f;
+        float maxDuration = 5f;
+        float elapsed = 0f;
         int count = cells.Count;
 
         // 각 셀의 속도와 회전속도를 미리 계산
@@ -327,10 +363,11 @@ public class Board : MonoBehaviour
         }
 
         bool allDone = false;
-        while (!allDone)
+        while (!allDone && elapsed < maxDuration)
         {
             allDone = true;
             float dt = Time.deltaTime;
+            elapsed += dt;
 
             for (int i = 0; i < count; i++)
             {
@@ -361,6 +398,16 @@ public class Board : MonoBehaviour
             }
 
             yield return null;
+        }
+
+        // 타임아웃 시 남은 셀 정리
+        for (int i = 0; i < count; i++)
+        {
+            if (cells[i] != null && cells[i].gameObject.activeSelf)
+            {
+                cells[i].rotation = Quaternion.identity;
+                ReturnCellToPool(cells[i].gameObject);
+            }
         }
 
         onComplete?.Invoke();
@@ -404,6 +451,10 @@ public class Board : MonoBehaviour
         {
             yield return new WaitForSeconds(garbageInterval);
 
+            // 중력 처리 중이면 완료될 때까지 대기
+            while (isProcessingGravity)
+                yield return null;
+
             if (!PushGarbageLine(currentBlockTransform))
             {
                 garbageCoroutine = null;
@@ -442,13 +493,18 @@ public class Board : MonoBehaviour
             }
         }
 
-        // row 0에 랜덤 빈 칸 생성
-        HashSet<int> emptyPositions = new HashSet<int>();
+        // row 0에 랜덤 빈 칸 생성 (Fisher-Yates 셔플로 확정적 선택)
         int emptyCount = Mathf.Min(emptyCountPerLine, width - 1);
-        while (emptyPositions.Count < emptyCount)
+        int[] indices = new int[width];
+        for (int i = 0; i < width; i++) indices[i] = i;
+        for (int i = width - 1; i > 0; i--)
         {
-            emptyPositions.Add(UnityEngine.Random.Range(0, width));
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
         }
+        HashSet<int> emptyPositions = new HashSet<int>();
+        for (int i = 0; i < emptyCount; i++)
+            emptyPositions.Add(indices[i]);
 
         for (int x = 0; x < width; x++)
         {
@@ -459,8 +515,9 @@ public class Board : MonoBehaviour
             }
             GameObject cell = GetCellFromPool();
             cell.transform.position = new Vector3(x, -1, 0);
-            cell.transform.SetParent(transform);
+            cell.transform.SetParent(placedBlockContainer);
             grid[x, 0] = cell.transform;
+            garbageCells.Add(cell.transform);
             cellsToAnimate.Add(cell.transform);
         }
 
@@ -468,8 +525,10 @@ public class Board : MonoBehaviour
         if (currentBlock != null)
             currentBlock.position += Vector3.up;
 
-        // 부드러운 상승 애니메이션
-        StartCoroutine(AnimateRise(cellsToAnimate));
+        // 부드러운 상승 애니메이션 (이전 애니메이션 정지 후 시작)
+        if (riseCoroutine != null)
+            StopCoroutine(riseCoroutine);
+        riseCoroutine = StartCoroutine(AnimateRise(cellsToAnimate));
 
         return true;
     }
@@ -510,6 +569,29 @@ public class Board : MonoBehaviour
                 Vector3 pos = startPositions[i];
                 pos.y += 1f;
                 cells[i].position = pos;
+            }
+        }
+    }
+    #endregion
+
+    #region 유틸리티 - 셀 위치 이동
+    /// <summary>
+    /// 진행 중인 AnimateRise를 정지하고 모든 셀을 grid 좌표에 맞춰 이동
+    /// </summary>
+    private void StopAnimationsAndSnapCells()
+    {
+        if (riseCoroutine != null)
+        {
+            StopCoroutine(riseCoroutine);
+            riseCoroutine = null;
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (grid[x, y] != null)
+                    grid[x, y].position = new Vector3(x, y, 0);
             }
         }
     }
@@ -564,37 +646,91 @@ public class Board : MonoBehaviour
 
             if (y < height && x >= 0 && x < width && y >= 0)
             {
-                child.SetParent(transform);
+                child.SetParent(placedBlockContainer);
                 grid[x, y] = child;
+            }
+            else
+            {
+                // 보드 범위 밖 셀은 풀에 반환 (고아 셀 방지)
+                ReturnCellToPool(child.gameObject);
             }
         }
     }
 
     /// <summary>
-    /// 완성된 줄 확인 및 제거
+    /// 코루틴으로 처리
     /// </summary>
-    public int ClearFullLines()
+    public void ApplyGravityAndClear(Action onComplete)
     {
-        int linesCleared = 0;
-
-        for (int y = height - 1; y >= 0; y--)
+        // 이전 중력 코루틴이 아직 실행 중이면 중단
+        if (gravityCoroutine != null)
         {
-            if (IsLineFull(y))
-            {
-                ClearLine(y);
-                MoveAllLinesDown(y);
-                linesCleared++;
-                y++;
-            }
+            StopCoroutine(gravityCoroutine);
+            gravityCoroutine = null;
+            isProcessingGravity = false;
         }
 
-        if (linesCleared > 0)
+        gravityCoroutine = StartCoroutine(GravityAndClearCoroutine(onComplete));
+    }
+
+    private IEnumerator GravityAndClearCoroutine(Action onComplete)
+    {
+        // 진행 중인 애니메이션 정지 + 셀 위치 보정
+        StopAnimationsAndSnapCells();
+        isProcessingGravity = true;
+
+        const int maxChainIterations = 50;
+        int chainCount = 0;
+
+        while (chainCount < maxChainIterations)
         {
+            // 1. 빈 칸 위의 플레이어 셀을 개별적으로 떨어뜨림
+            List<Transform> fallingCells = new List<Transform>();
+            List<int> fallDistances = new List<int>();
+            ApplyColumnGravity(fallingCells, fallDistances);
+
+            if (fallingCells.Count > 0)
+            {
+                yield return StartCoroutine(AnimateFall(fallingCells, fallDistances));
+            }
+
+            // 2. 완성 줄 탐색 및 제거
+            int linesCleared = ClearFullLinesImmediate();
+
+            if (linesCleared == 0)
+                break;
+
             soundManager.Play(SoundType.ClearLine);
             totalLinesCleared += linesCleared;
             emptyCountPerLine = 1 + totalLinesCleared / 10;
             if (emptyCountPerLine > width - 1)
                 emptyCountPerLine = width - 1;
+
+            chainCount++;
+            yield return null;
+        }
+
+        // 중력 처리 완료 후 가비지 라인 재개
+        isProcessingGravity = false;
+        gravityCoroutine = null;
+
+        onComplete?.Invoke();
+    }
+
+    /// <summary>
+    /// 완성된 줄을 즉시 제거하고 클리어 수 반환
+    /// </summary>
+    private int ClearFullLinesImmediate()
+    {
+        int linesCleared = 0;
+
+        for (int y = 0; y < height; y++)
+        {
+            if (IsLineFull(y))
+            {
+                ClearLine(y);
+                linesCleared++;
+            }
         }
 
         return linesCleared;
@@ -629,20 +765,77 @@ public class Board : MonoBehaviour
     }
 
     /// <summary>
-    /// 제거된 줄 위의 모든 셀을 아래로 이동
+    /// 각 열마다 플레이어 셀만 아래로 내림 (가비지 셀은 고정)
     /// </summary>
-    private void MoveAllLinesDown(int clearedY)
+    private void ApplyColumnGravity(List<Transform> fallingCells, List<int> fallDistances)
     {
-        for (int y = clearedY + 1; y < height; y++)
+        for (int x = 0; x < width; x++)
         {
-            for (int x = 0; x < width; x++)
+            int writeY = 0;
+            for (int readY = 0; readY < height; readY++)
             {
-                if (grid[x, y] != null)
+                Transform cell = grid[x, readY];
+                if (cell == null) continue;
+
+                // 가비지 셀은 고정: 이동하지 않고, 다음 쓰기 위치를 그 위로 설정
+                if (garbageCells.Contains(cell))
                 {
-                    grid[x, y - 1] = grid[x, y];
-                    grid[x, y] = null;
-                    grid[x, y - 1].position += Vector3.down;
+                    writeY = readY + 1;
+                    continue;
                 }
+
+                // 플레이어 셀: 빈 칸이 있으면 아래로 이동
+                if (writeY < readY)
+                {
+                    grid[x, writeY] = cell;
+                    grid[x, readY] = null;
+                    fallingCells.Add(cell);
+                    fallDistances.Add(readY - writeY);
+                }
+                writeY++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 셀 낙하 애니메이션
+    /// </summary>
+    private IEnumerator AnimateFall(List<Transform> cells, List<int> distances)
+    {
+        float duration = 0.1f;
+        float elapsed = 0f;
+
+        // 시작 위치 기록 (아직 이전 위치에 있음)
+        Vector3[] startPositions = new Vector3[cells.Count];
+        for (int i = 0; i < cells.Count; i++)
+            startPositions[i] = cells[i].position;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                if (cells[i] != null && cells[i].gameObject.activeSelf)
+                {
+                    Vector3 pos = startPositions[i];
+                    pos.y -= distances[i] * t;
+                    cells[i].position = pos;
+                }
+            }
+
+            yield return null;
+        }
+
+        // 최종 위치 이동
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (cells[i] != null && cells[i].gameObject.activeSelf)
+            {
+                Vector3 pos = startPositions[i];
+                pos.y -= distances[i];
+                cells[i].position = pos;
             }
         }
     }
@@ -713,6 +906,7 @@ public class Board : MonoBehaviour
     /// </summary>
     private void ReturnCellToPool(GameObject cell)
     {
+        garbageCells.Remove(cell.transform);
         cell.SetActive(false);
         cell.transform.SetParent(cellPoolContainer);
         cellPool.Push(cell);
@@ -845,13 +1039,11 @@ public class Board : MonoBehaviour
     /// </summary>
     private int CalculateDropDistance(Transform blockTransform)
     {
-        int dropDistance = 0;
+        if (blockTransform.childCount == 0)
+            return 0;
 
-        while (true)
+        for (int dropDistance = 1; dropDistance <= height; dropDistance++)
         {
-            dropDistance++;
-            bool valid = true;
-
             foreach (Transform child in blockTransform)
             {
                 int x = Mathf.RoundToInt(child.position.x);
@@ -859,16 +1051,12 @@ public class Board : MonoBehaviour
 
                 if (!IsInsideBoard(x, y) || !IsEmpty(x, y))
                 {
-                    valid = false;
-                    break;
+                    return dropDistance - 1;
                 }
             }
-
-            if (!valid)
-            {
-                return dropDistance - 1;
-            }
         }
+
+        return height;
     }
     #endregion
 

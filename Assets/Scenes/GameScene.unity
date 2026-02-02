@@ -248,6 +248,7 @@ MonoBehaviour:
   blockPrefab: {fileID: 4745676227519731753, guid: 64f46471b5814f641989f663a70ee3b2, type: 3}
   previewLandPrefab: {fileID: 2350482751515213015, guid: 8498883501fbeb94aaef152b4b174f77, type: 3}
   scalePadding: 1.3
+  garbageInterval: 1
 --- !u!4 &391147835
 Transform:
   m_ObjectHideFlags: 0
