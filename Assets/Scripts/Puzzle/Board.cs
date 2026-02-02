@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -64,6 +66,15 @@ public class Board : MonoBehaviour
     private Vector3 backgroundScale2;
     private Vector3 blockScale;
     private Vector3 previewLandScale;
+
+    // 가비지 라인
+    private int totalLinesCleared;
+    private int emptyCountPerLine = 1;
+    [Header("가비지 라인 설정")]
+    [SerializeField] private float garbageInterval = 1f;
+    private Transform currentBlockTransform;
+    private Coroutine garbageCoroutine;
+    private System.Action onGarbageGameOver;
 
     #region Unity 생명주기
     private void Start()
@@ -256,6 +267,247 @@ public class Board : MonoBehaviour
 
         HideLandingPreview();
         ClearPreviewBlock();
+
+        totalLinesCleared = 0;
+        emptyCountPerLine = 1;
+    }
+
+    /// <summary>
+    /// 게임오버 연출: 모든 블록이 위로 튀어올랐다가 아래로 떨어짐
+    /// </summary>
+    public void PlayGameOverEffect(Action onComplete)
+    {
+        HideLandingPreview();
+        ClearPreviewBlock();
+
+        List<Transform> cells = new List<Transform>();
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (grid[x, y] != null)
+                {
+                    cells.Add(grid[x, y]);
+                    grid[x, y] = null;
+                }
+            }
+        }
+
+        if (cells.Count == 0)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        StartCoroutine(GameOverEffectCoroutine(cells, onComplete));
+    }
+
+    private IEnumerator GameOverEffectCoroutine(List<Transform> cells, Action onComplete)
+    {
+        float gravity = -75f;
+        float bottomY = -5f;
+        int count = cells.Count;
+
+        // 각 셀의 속도와 회전속도를 미리 계산
+        Vector2[] velocities = new Vector2[count];
+        float[] angularSpeeds = new float[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            cells[i].SetParent(null);
+
+            float vx = UnityEngine.Random.Range(-8f, 8f);
+            float vy = UnityEngine.Random.Range(10f, 25f);
+            velocities[i] = new Vector2(vx, vy);
+            angularSpeeds[i] = UnityEngine.Random.Range(-360f, 360f);
+        }
+
+        bool allDone = false;
+        while (!allDone)
+        {
+            allDone = true;
+            float dt = Time.deltaTime;
+
+            for (int i = 0; i < count; i++)
+            {
+                Transform cell = cells[i];
+                if (cell == null || !cell.gameObject.activeSelf) continue;
+
+                // 중력 적용
+                velocities[i].y += gravity * dt;
+
+                // 위치 업데이트
+                Vector3 pos = cell.position;
+                pos.x += velocities[i].x * dt;
+                pos.y += velocities[i].y * dt;
+                cell.position = pos;
+
+                // 회전 업데이트
+                cell.Rotate(0, 0, angularSpeeds[i] * dt);
+
+                if (pos.y > bottomY)
+                {
+                    allDone = false;
+                }
+                else
+                {
+                    cell.rotation = Quaternion.identity;
+                    ReturnCellToPool(cell.gameObject);
+                }
+            }
+
+            yield return null;
+        }
+
+        onComplete?.Invoke();
+    }
+    #endregion
+
+    #region 가비지 라인
+    /// <summary>
+    /// 가비지 라인 타이머 시작
+    /// </summary>
+    public void StartGarbageLines(Action onGameOver)
+    {
+        onGarbageGameOver = onGameOver;
+        StopGarbageLines();
+        garbageCoroutine = StartCoroutine(GarbageLineRoutine());
+    }
+
+    /// <summary>
+    /// 가비지 라인 타이머 정지
+    /// </summary>
+    public void StopGarbageLines()
+    {
+        if (garbageCoroutine != null)
+        {
+            StopCoroutine(garbageCoroutine);
+            garbageCoroutine = null;
+        }
+    }
+
+    /// <summary>
+    /// 현재 조작 중인 블록 참조 갱신
+    /// </summary>
+    public void SetCurrentBlock(Transform block)
+    {
+        currentBlockTransform = block;
+    }
+
+    private IEnumerator GarbageLineRoutine()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(garbageInterval);
+
+            if (!PushGarbageLine(currentBlockTransform))
+            {
+                garbageCoroutine = null;
+                onGarbageGameOver?.Invoke();
+                yield break;
+            }
+
+            if (currentBlockTransform != null)
+                ShowLandingPreview(currentBlockTransform);
+        }
+    }
+
+    /// <summary>
+    /// 밑에서 가비지 라인 1줄 올리기. 오버플로우 시 false 반환 (게임오버)
+    /// </summary>
+    public bool PushGarbageLine(Transform currentBlock)
+    {
+        // 최상단 행에 셀이 있으면 게임오버
+        for (int x = 0; x < width; x++)
+        {
+            if (grid[x, height - 1] != null)
+                return false;
+        }
+
+        // 애니메이션 대상 수집
+        List<Transform> cellsToAnimate = new List<Transform>();
+
+        // 그리드를 위로 1칸 시프트
+        for (int y = height - 1; y > 0; y--)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                grid[x, y] = grid[x, y - 1];
+                if (grid[x, y] != null)
+                    cellsToAnimate.Add(grid[x, y]);
+            }
+        }
+
+        // row 0에 가비지 셀 생성 (랜덤 빈 칸)
+        HashSet<int> emptyPositions = new HashSet<int>();
+        int emptyCount = Mathf.Min(emptyCountPerLine, width - 1);
+        while (emptyPositions.Count < emptyCount)
+        {
+            emptyPositions.Add(UnityEngine.Random.Range(0, width));
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            if (emptyPositions.Contains(x))
+            {
+                grid[x, 0] = null;
+                continue;
+            }
+            GameObject cell = GetCellFromPool();
+            cell.transform.position = new Vector3(x, -1, 0);
+            cell.transform.SetParent(transform);
+            grid[x, 0] = cell.transform;
+            cellsToAnimate.Add(cell.transform);
+        }
+
+        // 현재 블록 위치를 즉시 위로 이동
+        if (currentBlock != null)
+            currentBlock.position += Vector3.up;
+
+        // 부드러운 상승 애니메이션
+        StartCoroutine(AnimateRise(cellsToAnimate));
+
+        return true;
+    }
+
+    private IEnumerator AnimateRise(List<Transform> cells)
+    {
+        float duration = 0.15f;
+        float elapsed = 0f;
+
+        // 현재 위치를 시작점으로, +1이 목표
+        Vector3[] startPositions = new Vector3[cells.Count];
+        for (int i = 0; i < cells.Count; i++)
+            startPositions[i] = cells[i].position;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                if (cells[i] != null && cells[i].gameObject.activeSelf)
+                {
+                    Vector3 pos = startPositions[i];
+                    pos.y += t;
+                    cells[i].position = pos;
+                }
+            }
+
+            yield return null;
+        }
+
+        // 최종 위치 스냅 (정확한 정수 좌표)
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (cells[i] != null && cells[i].gameObject.activeSelf)
+            {
+                Vector3 pos = startPositions[i];
+                pos.y += 1f;
+                cells[i].position = pos;
+            }
+        }
     }
     #endregion
 
@@ -335,6 +587,10 @@ public class Board : MonoBehaviour
         if (linesCleared > 0)
         {
             soundManager.Play(SoundType.ClearLine);
+            totalLinesCleared += linesCleared;
+            emptyCountPerLine = 1 + totalLinesCleared / 10;
+            if (emptyCountPerLine > width - 1)
+                emptyCountPerLine = width - 1;
         }
 
         return linesCleared;

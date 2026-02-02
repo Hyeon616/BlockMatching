@@ -24,6 +24,8 @@ public class BlockController : MonoBehaviour
     /// </summary>
     public event Action OnLanded;
 
+
+
     /// <summary>
     /// 블록 초기화 (참조 주입). 스폰 위치가 유효하면 true, 게임오버면 false 반환
     /// </summary>

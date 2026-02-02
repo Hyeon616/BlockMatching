@@ -40,6 +40,9 @@ public class GameManager : MonoBehaviour
 
         // 현재 블록 생성
         SpawnBlock();
+
+        // 가비지 라인 타이머 시작
+        board.StartGarbageLines(GameOver);
     }
 
     /// <summary>
@@ -76,6 +79,7 @@ public class GameManager : MonoBehaviour
         if (currentBlock != null)
         {
             currentBlock.OnLanded += OnBlockLanded;
+            board.SetCurrentBlock(blockObj.transform);
         }
 
         // 다음 블록 준비
@@ -105,13 +109,16 @@ public class GameManager : MonoBehaviour
         currentBlock = null;
         nextBlockData = null;
 
+        board.StopGarbageLines();
+        board.SetCurrentBlock(null);
         soundManager.Play(SoundType.GameOver);
 
-        board.ClearBoard();
-
-        if (startButton != null)
+        board.PlayGameOverEffect(() =>
         {
-            startButton.gameObject.SetActive(true);
-        }
+            if (startButton != null)
+            {
+                startButton.gameObject.SetActive(true);
+            }
+        });
     }
 }

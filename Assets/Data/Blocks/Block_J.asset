@@ -13,5 +13,4 @@ MonoBehaviour:
   m_Name: Block_J
   m_EditorClassIdentifier: 
   blockName: J
-  blockColor: {r: 0, g: 0, b: 1, a: 1}
-  shape: 00000000000000000000010001010100
+  shape: 00000000000001000000010001010100
