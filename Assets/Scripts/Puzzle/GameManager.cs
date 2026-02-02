@@ -106,6 +106,12 @@ public class GameManager : MonoBehaviour
     /// </summary>
     void GameOver()
     {
+        // 현재 낙하 중인 블록의 셀을 보드 그리드에 등록 
+        if (currentBlock != null)
+        {
+            board.PlaceBlock(currentBlock.transform);
+            board.ReturnBlockParentToPool(currentBlock.gameObject);
+        }
         currentBlock = null;
         nextBlockData = null;
 

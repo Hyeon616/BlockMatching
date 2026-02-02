@@ -277,6 +277,10 @@ public class Board : MonoBehaviour
     /// </summary>
     public void PlayGameOverEffect(Action onComplete)
     {
+        // 실행 중인 AnimateRise 등 모든 코루틴 정지
+        StopAllCoroutines();
+        garbageCoroutine = null;
+
         HideLandingPreview();
         ClearPreviewBlock();
 
@@ -438,7 +442,7 @@ public class Board : MonoBehaviour
             }
         }
 
-        // row 0에 가비지 셀 생성 (랜덤 빈 칸)
+        // row 0에 랜덤 빈 칸 생성
         HashSet<int> emptyPositions = new HashSet<int>();
         int emptyCount = Mathf.Min(emptyCountPerLine, width - 1);
         while (emptyPositions.Count < emptyCount)
@@ -498,7 +502,7 @@ public class Board : MonoBehaviour
             yield return null;
         }
 
-        // 최종 위치 스냅 (정확한 정수 좌표)
+        // 최종 위치 
         for (int i = 0; i < cells.Count; i++)
         {
             if (cells[i] != null && cells[i].gameObject.activeSelf)
@@ -683,6 +687,7 @@ public class Board : MonoBehaviour
             cell.transform.localScale = blockScale;
         }
         cell.SetActive(true);
+        cell.transform.rotation = Quaternion.identity;
         return cell;
     }
 
