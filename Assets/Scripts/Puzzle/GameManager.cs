@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,7 +14,13 @@ public class GameManager : MonoBehaviour
 
     [Header("UI")]
     [SerializeField] private Button startButton;
+    [SerializeField] private TMP_Text clearLineText;
+    [SerializeField] private TMP_Text levelText;
+    [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private TMP_Text highScoreText;
 
+    private const string HIGH_SCORE_KEY = "HighScore";
+    private int highScore;
     private BlockController currentBlock;
     private BlockData nextBlockData;
 
@@ -23,6 +30,9 @@ public class GameManager : MonoBehaviour
         {
             startButton.onClick.AddListener(StartGame);
         }
+
+        highScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
+        UpdateHighScoreUI();
     }
 
     /// <summary>
@@ -34,6 +44,9 @@ public class GameManager : MonoBehaviour
         {
             startButton.gameObject.SetActive(false);
         }
+
+        board.ClearBoard();
+        UpdateUI();
 
         // 첫 번째 다음 블록 준비
         PrepareNextBlock();
@@ -97,8 +110,38 @@ public class GameManager : MonoBehaviour
             currentBlock = null;
         }
 
+        UpdateUI();
+
         // 새 블록 생성
         SpawnBlock();
+    }
+
+    void UpdateUI()
+    {
+        if (clearLineText != null)
+            clearLineText.text = board.TotalLinesCleared.ToString();
+        if (levelText != null)
+            levelText.text = board.Level.ToString();
+        if (scoreText != null)
+            scoreText.text = board.Score.ToString();
+    }
+
+    void UpdateHighScoreUI()
+    {
+        if (highScoreText != null)
+            highScoreText.text = highScore.ToString();
+    }
+
+    void TrySaveHighScore()
+    {
+        int currentScore = board.Score;
+        if (currentScore > highScore)
+        {
+            highScore = currentScore;
+            PlayerPrefs.SetInt(HIGH_SCORE_KEY, highScore);
+            PlayerPrefs.Save();
+            UpdateHighScoreUI();
+        }
     }
 
     /// <summary>
@@ -117,6 +160,7 @@ public class GameManager : MonoBehaviour
 
         board.StopGarbageLines();
         board.SetCurrentBlock(null);
+        TrySaveHighScore();
         soundManager.Play(SoundType.GameOver);
 
         board.PlayGameOverEffect(() =>

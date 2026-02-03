@@ -33,7 +33,8 @@ public class Board : MonoBehaviour
     [Header("프리팹")]
     [SerializeField] private GameObject backgroundPrefab_Light;
     [SerializeField] private GameObject backgroundPrefab_Dark;
-    [SerializeField] private GameObject blockPrefab;
+    [SerializeField] private GameObject tetrisBlockPrefab;
+    [SerializeField] private GameObject lineBlockPrefab;
     [SerializeField] private GameObject previewLandPrefab;
     [SerializeField, Range(1f, 2f)] private float scalePadding = 1.3f;
     #endregion
@@ -50,10 +51,16 @@ public class Board : MonoBehaviour
     private const int PREVIEW_POOL_SIZE = 16;
     private List<GameObject> previewPool;
 
-    // 블록 셀 풀
+    // 테트리스 블록 셀 풀
     private const int CELL_POOL_INITIAL_SIZE = 64;
     private Stack<GameObject> cellPool;
     private Transform cellPoolContainer;
+
+    // 가비지 라인 셀 풀
+    private const int LINE_POOL_INITIAL_SIZE = 32;
+    private Stack<GameObject> lineCellPool;
+    private Transform lineCellPoolContainer;
+    private HashSet<GameObject> lineCellSet = new HashSet<GameObject>();
 
     // 착지 미리보기 풀
     private const int LANDING_PREVIEW_POOL_SIZE = 16;
@@ -68,12 +75,18 @@ public class Board : MonoBehaviour
     // 셀 스케일 캐시
     private Vector3 backgroundScale1;
     private Vector3 backgroundScale2;
-    private Vector3 blockScale;
+    private Vector3 tetrisBlockScale;
+    private Vector3 lineBlockScale;
     private Vector3 previewLandScale;
 
     // 가비지 라인
     private int totalLinesCleared;
     private int emptyCountPerLine = 1;
+    private int score;
+
+    public int TotalLinesCleared => totalLinesCleared;
+    public int Level => emptyCountPerLine;
+    public int Score => score;
     [Header("가비지 라인 설정")]
     [SerializeField] private float garbageInterval = 1f;
     private Transform currentBlockTransform;
@@ -90,8 +103,10 @@ public class Board : MonoBehaviour
         grid = new Transform[width, height];
         backgroundScale1 = GetScaleForUnitSize(backgroundPrefab_Light);
         backgroundScale2 = GetScaleForUnitSize(backgroundPrefab_Dark);
-        if (blockPrefab != null)
-            blockScale = GetScaleForUnitSize(blockPrefab);
+        if (tetrisBlockPrefab != null)
+            tetrisBlockScale = GetScaleForUnitSize(tetrisBlockPrefab);
+        if (lineBlockPrefab != null)
+            lineBlockScale = GetScaleForUnitSize(lineBlockPrefab);
         if (previewLandPrefab != null)
             previewLandScale = GetScaleForUnitSize(previewLandPrefab);
 
@@ -99,6 +114,7 @@ public class Board : MonoBehaviour
         CreatePlacedBlockContainer();
         CreatePreviewArea();
         CreateCellPool();
+        CreateLineCellPool();
         CreateLandingPreviewPool();
         CreateBlockParentPool();
         SetupCamera();
@@ -149,7 +165,7 @@ public class Board : MonoBehaviour
     /// </summary>
     private void CreatePreviewArea()
     {
-        if (backgroundPrefab_Light == null || backgroundPrefab_Dark == null || blockPrefab == null || previewRoot == null) return;
+        if (backgroundPrefab_Light == null || backgroundPrefab_Dark == null || tetrisBlockPrefab == null || previewRoot == null) return;
 
         // 미리보기 배경 생성 (격자무늬)
         for (int x = 0; x < previewSize; x++)
@@ -177,8 +193,8 @@ public class Board : MonoBehaviour
         previewPool = new List<GameObject>(PREVIEW_POOL_SIZE);
         for (int i = 0; i < PREVIEW_POOL_SIZE; i++)
         {
-            GameObject cell = Instantiate(blockPrefab, previewContainer);
-            cell.transform.localScale = blockScale;
+            GameObject cell = Instantiate(tetrisBlockPrefab, previewContainer);
+            cell.transform.localScale = tetrisBlockScale;
             cell.name = "PreviewBlock";
             cell.SetActive(false);
             previewPool.Add(cell);
@@ -294,7 +310,9 @@ public class Board : MonoBehaviour
 
         totalLinesCleared = 0;
         emptyCountPerLine = 1;
+        score = 0;
         garbageCells.Clear();
+        lineCellSet.Clear();
     }
 
     /// <summary>
@@ -513,7 +531,7 @@ public class Board : MonoBehaviour
                 grid[x, 0] = null;
                 continue;
             }
-            GameObject cell = GetCellFromPool();
+            GameObject cell = GetLineCellFromPool();
             cell.transform.position = new Vector3(x, -1, 0);
             cell.transform.SetParent(placedBlockContainer);
             grid[x, 0] = cell.transform;
@@ -681,6 +699,7 @@ public class Board : MonoBehaviour
 
         const int maxChainIterations = 50;
         int chainCount = 0;
+        int totalLinesClearedThisDrop = 0;
 
         while (chainCount < maxChainIterations)
         {
@@ -701,6 +720,7 @@ public class Board : MonoBehaviour
                 break;
 
             soundManager.Play(SoundType.ClearLine);
+            totalLinesClearedThisDrop += linesCleared;
             totalLinesCleared += linesCleared;
             emptyCountPerLine = 1 + totalLinesCleared / 10;
             if (emptyCountPerLine > width - 1)
@@ -709,6 +729,10 @@ public class Board : MonoBehaviour
             chainCount++;
             yield return null;
         }
+
+        // 한 번의 드랍에서 연쇄 포함 총 클리어 줄 수로 점수 산정
+        if (totalLinesClearedThisDrop > 0)
+            score += totalLinesClearedThisDrop == 1 ? 100 : 100 * (1 << totalLinesClearedThisDrop);
 
         // 중력 처리 완료 후 가비지 라인 재개
         isProcessingGravity = false;
@@ -843,7 +867,7 @@ public class Board : MonoBehaviour
 
     #region 셀 오브젝트 풀
     /// <summary>
-    /// 블록 셀 풀 초기화
+    /// 테트리스 블록 셀 풀 초기화
     /// </summary>
     private void CreateCellPool()
     {
@@ -853,19 +877,41 @@ public class Board : MonoBehaviour
         containerObj.transform.SetParent(transform);
         cellPoolContainer = containerObj.transform;
 
-        if (blockPrefab == null) return;
+        if (tetrisBlockPrefab == null) return;
 
         for (int i = 0; i < CELL_POOL_INITIAL_SIZE; i++)
         {
-            GameObject cell = Instantiate(blockPrefab, cellPoolContainer);
-            cell.transform.localScale = blockScale;
+            GameObject cell = Instantiate(tetrisBlockPrefab, cellPoolContainer);
+            cell.transform.localScale = tetrisBlockScale;
             cell.SetActive(false);
             cellPool.Push(cell);
         }
     }
 
     /// <summary>
-    /// 풀에서 셀 가져오기 (부족하면 새로 생성)
+    /// 가비지 라인 셀 풀 초기화
+    /// </summary>
+    private void CreateLineCellPool()
+    {
+        lineCellPool = new Stack<GameObject>(LINE_POOL_INITIAL_SIZE);
+
+        GameObject containerObj = new GameObject("LineCellPool");
+        containerObj.transform.SetParent(transform);
+        lineCellPoolContainer = containerObj.transform;
+
+        if (lineBlockPrefab == null) return;
+
+        for (int i = 0; i < LINE_POOL_INITIAL_SIZE; i++)
+        {
+            GameObject cell = Instantiate(lineBlockPrefab, lineCellPoolContainer);
+            cell.transform.localScale = lineBlockScale;
+            cell.SetActive(false);
+            lineCellPool.Push(cell);
+        }
+    }
+
+    /// <summary>
+    /// 풀에서 테트리스 셀 가져오기 (부족하면 새로 생성)
     /// </summary>
     public GameObject GetCellFromPool()
     {
@@ -876,11 +922,32 @@ public class Board : MonoBehaviour
         }
         else
         {
-            cell = Instantiate(blockPrefab, cellPoolContainer);
-            cell.transform.localScale = blockScale;
+            cell = Instantiate(tetrisBlockPrefab, cellPoolContainer);
+            cell.transform.localScale = tetrisBlockScale;
         }
         cell.SetActive(true);
         cell.transform.rotation = Quaternion.identity;
+        return cell;
+    }
+
+    /// <summary>
+    /// 풀에서 가비지 라인 셀 가져오기 (부족하면 새로 생성)
+    /// </summary>
+    public GameObject GetLineCellFromPool()
+    {
+        GameObject cell;
+        if (lineCellPool.Count > 0)
+        {
+            cell = lineCellPool.Pop();
+        }
+        else
+        {
+            cell = Instantiate(lineBlockPrefab, lineCellPoolContainer);
+            cell.transform.localScale = lineBlockScale;
+        }
+        cell.SetActive(true);
+        cell.transform.rotation = Quaternion.identity;
+        lineCellSet.Add(cell);
         return cell;
     }
 
@@ -902,14 +969,23 @@ public class Board : MonoBehaviour
     }
 
     /// <summary>
-    /// 셀을 풀에 반환
+    /// 셀을 적절한 풀에 반환
     /// </summary>
     private void ReturnCellToPool(GameObject cell)
     {
         garbageCells.Remove(cell.transform);
         cell.SetActive(false);
-        cell.transform.SetParent(cellPoolContainer);
-        cellPool.Push(cell);
+
+        if (lineCellSet.Remove(cell))
+        {
+            cell.transform.SetParent(lineCellPoolContainer);
+            lineCellPool.Push(cell);
+        }
+        else
+        {
+            cell.transform.SetParent(cellPoolContainer);
+            cellPool.Push(cell);
+        }
     }
     #endregion
 

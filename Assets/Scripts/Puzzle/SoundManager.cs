@@ -7,6 +7,9 @@ public enum SoundType
     Land,
     ClearLine,
     GameOver,
+    LevelUp,
+    Bgm,
+    UIClick
 }
 
 /// <summary>
