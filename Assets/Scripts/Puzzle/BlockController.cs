@@ -13,7 +13,7 @@ public class BlockController : MonoBehaviour
     [Header("자동 낙하 설정")]
     [SerializeField] private float fallInterval = 1f;
 
-    private Board board;
+    private BoardView board;
     private SoundManager soundManager;
     private float lastMoveTime;
     private float lastFallTime;
@@ -24,12 +24,10 @@ public class BlockController : MonoBehaviour
     /// </summary>
     public event Action OnLanded;
 
-
-
     /// <summary>
     /// 블록 초기화 (참조 주입). 스폰 위치가 유효하면 true, 게임오버면 false 반환
     /// </summary>
-    public bool Initialize(Board board, SoundManager soundManager)
+    public bool Initialize(BoardView board, SoundManager soundManager)
     {
         this.board = board;
         this.soundManager = soundManager;

@@ -9,7 +9,7 @@ public class GameManager : MonoBehaviour
 {
     [Header("참조")]
     [SerializeField] private BlockMaker blockMaker;
-    [SerializeField] private Board board;
+    [SerializeField] private BoardView board;
     [SerializeField] private SoundManager soundManager;
 
     [Header("UI")]
@@ -33,6 +33,39 @@ public class GameManager : MonoBehaviour
 
         highScore = PlayerPrefs.GetInt(HIGH_SCORE_KEY, 0);
         UpdateHighScoreUI();
+
+        // 이벤트 구독
+        board.OnScoreChanged += OnScoreChanged;
+        board.OnLevelChanged += OnLevelChanged;
+        board.OnLinesClearedChanged += OnLinesClearedChanged;
+    }
+
+    private void OnDestroy()
+    {
+        if (board != null)
+        {
+            board.OnScoreChanged -= OnScoreChanged;
+            board.OnLevelChanged -= OnLevelChanged;
+            board.OnLinesClearedChanged -= OnLinesClearedChanged;
+        }
+    }
+
+    private void OnScoreChanged(int score)
+    {
+        if (scoreText != null)
+            scoreText.text = score.ToString();
+    }
+
+    private void OnLevelChanged(int level)
+    {
+        if (levelText != null)
+            levelText.text = level.ToString();
+    }
+
+    private void OnLinesClearedChanged(int lines)
+    {
+        if (clearLineText != null)
+            clearLineText.text = lines.ToString();
     }
 
     /// <summary>
@@ -48,7 +81,6 @@ public class GameManager : MonoBehaviour
         }
 
         board.ClearBoard();
-        UpdateUI();
 
         // 첫 번째 다음 블록 준비
         PrepareNextBlock();
@@ -115,20 +147,8 @@ public class GameManager : MonoBehaviour
             currentBlock = null;
         }
 
-        UpdateUI();
-
         // 새 블록 생성
         SpawnBlock();
-    }
-
-    void UpdateUI()
-    {
-        if (clearLineText != null)
-            clearLineText.text = board.TotalLinesCleared.ToString();
-        if (levelText != null)
-            levelText.text = board.Level.ToString();
-        if (scoreText != null)
-            scoreText.text = board.Score.ToString();
     }
 
     void UpdateHighScoreUI()
@@ -154,7 +174,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     void GameOver()
     {
-        // 현재 낙하 중인 블록의 셀을 보드 그리드에 등록 
+        // 현재 낙하 중인 블록의 셀을 보드 그리드에 등록
         if (currentBlock != null)
         {
             board.PlaceBlock(currentBlock.transform);

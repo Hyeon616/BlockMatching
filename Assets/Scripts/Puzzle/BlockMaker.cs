@@ -9,7 +9,7 @@ public class BlockMaker : MonoBehaviour
     [SerializeField] private BlockData[] blockDataList;
 
     [Header("참조")]
-    [SerializeField] private Board board;
+    [SerializeField] private BoardView board;
     [SerializeField] private SoundManager soundManager;
 
     /// <summary>
