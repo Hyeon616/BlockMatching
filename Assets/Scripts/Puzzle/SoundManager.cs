@@ -30,10 +30,13 @@ public class SoundManager : MonoBehaviour
 
     private Dictionary<SoundType, SoundEntry> soundMap;
     private AudioSource audioSource;
+    private AudioSource bgmAudioSource;
 
     private void Awake()
     {
         audioSource = gameObject.AddComponent<AudioSource>();
+        bgmAudioSource = gameObject.AddComponent<AudioSource>();
+        bgmAudioSource.loop = true;
         BuildSoundMap();
     }
 
@@ -57,5 +60,26 @@ public class SoundManager : MonoBehaviour
         {
             audioSource.PlayOneShot(entry.clip, entry.volume);
         }
+    }
+
+    /// <summary>
+    /// BGM 루프 재생
+    /// </summary>
+    public void PlayBGM()
+    {
+        if (soundMap.TryGetValue(SoundType.Bgm, out var entry) && entry.clip != null)
+        {
+            bgmAudioSource.clip = entry.clip;
+            bgmAudioSource.volume = entry.volume;
+            bgmAudioSource.Play();
+        }
+    }
+
+    /// <summary>
+    /// BGM 정지
+    /// </summary>
+    public void StopBGM()
+    {
+        bgmAudioSource.Stop();
     }
 }

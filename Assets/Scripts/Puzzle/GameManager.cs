@@ -40,6 +40,8 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
+        soundManager.Play(SoundType.UIClick);
+
         if (startButton != null)
         {
             startButton.gameObject.SetActive(false);
@@ -56,6 +58,9 @@ public class GameManager : MonoBehaviour
 
         // 가비지 라인 타이머 시작
         board.StartGarbageLines(GameOver);
+
+        // BGM 재생
+        soundManager.PlayBGM();
     }
 
     /// <summary>
@@ -161,6 +166,7 @@ public class GameManager : MonoBehaviour
         board.StopGarbageLines();
         board.SetCurrentBlock(null);
         TrySaveHighScore();
+        soundManager.StopBGM();
         soundManager.Play(SoundType.GameOver);
 
         board.PlayGameOverEffect(() =>

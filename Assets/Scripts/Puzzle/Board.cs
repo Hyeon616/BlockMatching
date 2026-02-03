@@ -497,10 +497,50 @@ public class Board : MonoBehaviour
                 return false;
         }
 
-        // 애니메이션 대상 수집
+        // 1. 빈 행 제거: 한 번의 패스로 비어있지 않은 행만 아래부터 채움
+        int writeY = 0;
+        for (int readY = 0; readY < height; readY++)
+        {
+            // 이 행에 셀이 있는지 확인
+            bool hasCell = false;
+            for (int x = 0; x < width; x++)
+            {
+                if (grid[x, readY] != null)
+                {
+                    hasCell = true;
+                    break;
+                }
+            }
+
+            if (hasCell)
+            {
+                // writeY와 readY가 다르면 행을 이동
+                if (writeY != readY)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        grid[x, writeY] = grid[x, readY];
+                        if (grid[x, writeY] != null)
+                            grid[x, writeY].position = new Vector3(x, writeY, 0);
+                    }
+                }
+                writeY++;
+            }
+        }
+
+        // writeY부터 위는 모두 null로 설정
+        for (int y = writeY; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                grid[x, y] = null;
+            }
+        }
+
+        // 2. 애니메이션 대상 수집
         List<Transform> cellsToAnimate = new List<Transform>();
 
-        // 그리드를 위로 1칸 시프트
+        // 3. 그리드를 위로 1칸 시프트
         for (int y = height - 1; y > 0; y--)
         {
             for (int x = 0; x < width; x++)
@@ -511,7 +551,7 @@ public class Board : MonoBehaviour
             }
         }
 
-        // row 0에 랜덤 빈 칸 생성 (Fisher-Yates 셔플로 확정적 선택)
+        // 4. row 0에 랜덤 빈 칸 생성 (Fisher-Yates 셔플로 확정적 선택)
         int emptyCount = Mathf.Min(emptyCountPerLine, width - 1);
         int[] indices = new int[width];
         for (int i = 0; i < width; i++) indices[i] = i;
@@ -539,11 +579,11 @@ public class Board : MonoBehaviour
             cellsToAnimate.Add(cell.transform);
         }
 
-        // 현재 블록 위치를 즉시 위로 이동
+        // 5. 현재 블록 위치를 즉시 위로 이동
         if (currentBlock != null)
             currentBlock.position += Vector3.up;
 
-        // 부드러운 상승 애니메이션 (이전 애니메이션 정지 후 시작)
+        // 6. 부드러운 상승 애니메이션 (이전 애니메이션 정지 후 시작)
         if (riseCoroutine != null)
             StopCoroutine(riseCoroutine);
         riseCoroutine = StartCoroutine(AnimateRise(cellsToAnimate));
@@ -722,9 +762,13 @@ public class Board : MonoBehaviour
             soundManager.Play(SoundType.ClearLine);
             totalLinesClearedThisDrop += linesCleared;
             totalLinesCleared += linesCleared;
+            int previousLevel = emptyCountPerLine;
             emptyCountPerLine = 1 + totalLinesCleared / 10;
             if (emptyCountPerLine > width - 1)
                 emptyCountPerLine = width - 1;
+
+            if (emptyCountPerLine > previousLevel)
+                soundManager.Play(SoundType.LevelUp);
 
             chainCount++;
             yield return null;
